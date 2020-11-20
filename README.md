@@ -2,7 +2,7 @@
 
 En las infraestructuras actuales basadas mayoritariamente en servidores Linux, cuando se produce un incidente de seguridad, éste debe de ser tratado de una forma adecuada, estudiando desde el comienzo todas las implicaciones que puede provocar en los activos de una compañía, en su reputación e incluso en su continuidad de negocio. En esta charla se muestra un incidente real de seguridad, como se planificó la respuesta a incidentes, como se actuó, investigó su alcance y se programó una herramienta personalizada para la obtención y análisis de evidencias.
 
-![Forensic_GET Logo](https://github.com/yagox666/Forensic_GET/blob/main/forensic_logo.png?raw=true)
+![Forensic_GET Logo](https://github.com/yadox666/Forensic_GET/blob/main/forensic_logo.png?raw=true)
 
 
 **Herramienta de extracción forénsica en sistemas Linux** _ **forensic\_get.sh** _
