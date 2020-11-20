@@ -1,52 +1,33 @@
-**Descripción de los trabajos realizados**
+**Introducción a la forénsica en sistemas Linux**
 
-Tras la detección de algunos posibles casos de uso fraudulento de tarjetas de crédito aparentemente relacionadas con el sitio web de comercio electrónico basado en Magento, se sospecha de un nuevo caso de compromiso de las infraestructuras del cliente. Es prioritario realizar una auditoría forénsica completa dirigida principalemente a la localización de cualquier herramienta maliciosa (malware) o vulnerabilidad que pueda permitir el acceso remoto a los servidores del cliente o la los datos ahí almacenados. Para ello se realizarán pruebas exhaustivas que ayuden a encontrar cualquier tipo de IoC (indicadores de compromiso) en los sistemas presuntamente afectados.
+En las infraestructuras actuales basadas mayoritariamente en servidores Linux, cuando se produce un incidente de seguridad, éste debe de ser tratado de una forma adecuada, estudiando desde el comienzo todas las implicaciones que puede provocar en los activos de una compañía, en su reputación e incluso en su continuidad de negocio. En esta charla se muestra un incidente real de seguridad, como se planificó la respuesta a incidentes, como se actuó, investigó su alcance y se programó una herramienta personalizada para la obtención y análisis de evidencias.
 
-Además se procurará extraer, si las huberia, algún tipo de evidencias sobre actos delictivos o simplemente accidentales que puedan haber causado algún incidente de pérdida de control sobre la información de carácter privado que debe ser protegida.
+![Forensic_GET Logo](https://github.com/yagox666/Forensic_GET/blob/main/forensic_logo.png?raw=true)
 
-Los antecedentes de ataques dirigidos a este cliente hacen que se deba de tener un cuidado especial en la protección de sus infraestructuras y datos personales ahí almacenados y tratados, por lo que se ha tenido un cuidado especial y una gran minuciosidad en la realización de la auditoría prolongando su ejecución lo necesario para alcanzar los resultados más fiables. A pesar de esto, y debido a la complejidad de sus infraestructuras, siempre recomendaremos la realización de auditorías de seguridad de tipo pentest de caja blanca y de caja negra de forma periódica a fin de localizar vulnerabilidades en el software, aplicaciones, servicios y sistemas operativos que componen estas infraestructuras, ya que éste tipo de auditorías no se realizan en este procedimiento que es de tipo forénsico.
 
-Tras la sospecha de fraude relacionado con tarjetas de crédito, y tras la realización de una forénsica previa con una compañía certificada en los protocolos PCI-DSS, el cliente contacta con nosotros a fin de realizar ciertos trabajos más dirigidos a revisar que su principal sitio web no esté comprometido y pueda seguir realizando su labor comercial con seguridad. Sobre el rango de fechas del posible incidente, el cliente informa:
+**Herramienta de extracción forénsica en sistemas Linux** _ **forensic\_get.sh** _
 
-&quot;_Respecto a las fechas, nos notificaron que el rango de fechas era desde Junio 2018 hasta Octubre 2019, pero creo que habría que analizar hasta la actualidad por cubrirnos en lo que hay ahora mismo en producción.&quot;_
+Durante la realización del último proyecto de respuesta ante un incidente relativo al robo de datos de tarjetas de crédito en un sitio web comercial, decido programar mi propia herramienta de extracción de datos en vivo para servidores Linux. Si bien ya existen otras herramientas comerciales y abiertas, este script obtendrá unos datos más dirigidos a facilitar el posterior análisis de información en un caso como éste. Los servidores a analizar estaban virtualizados en VMware ESXi, por lo que la auditoría forénsica comenzó por la creación de la infraestructura de virtualización en mi laboratorio, la replicación de las máquinas virtuales, la creación de snapshots o imágenes de las máquinas a analizar y la modificación de las claves del usuario _root_ para su arranque y puesta en funcionamiento.
 
-Las tareas que se realizan tras la aceptación del presupuesto son las siguientes:
+Tal y como dicen los comentarios al principio del script _ **forensic\_get.sh** _ programado para Shell de tipo Bash, la realización de una auditoría forénsica en sistemas en vivo o live systems no resulta en la mayoría de los casos la mejor opción, pero tras la clonación del sistema puede resultar ideal como una solución híbrida para analizar un sistema en funcionamiento.
 
-1. **Descarga y recuperación de las máquinas virtuales**. Se producen algunas dificultades y retrasos en la ejecución por el tamaño de las mismas y los métodos de entrega. Las máquinas virtuales a analizar son las siguiente según conversación por email con el cliente:
+Este script realiza la extracción de todo tipo de información relevante durante una auditoría forénsica para sistemas Linux, Además se especializa en la búsqueda de malware específico para servidores Web (shells), de bases de datos MySQL, etc.
 
-&quot;_La máquina fw1.weareknitters.com es el cortafuegos y balanceador por donde pasa TODO._
+Al determinar que una auditoría de este tipo resulta un trabajo muy específico y arduo debido a la gran cantidad de información que debe de analizarse, decidí programar una herramienta para extraer aquella información relevante de cada máquina virtual hacia una unidad extraíble, de forma que pueda ser analizada posteriormente por un auditor especializado.
 
-_Las máquinas w1.weareknitters.com y w2.weareknitters.com son frontales web balanceados._
+**Requisitos de la herramienta**
 
-_La máquina wa.weareknitters.com es el panel de control de Magento donde solo se puede conectar el equipo de WAK mediante certificado digital._
+Este script ha sido programado para ejecutarse en un sistema virtual o físico basado en Debian Linux, Ubuntu Linux o cualquier derivado.
 
-_db1.weareknitters.com es la máquina de la base de datos de Magento._
+Se ejecutará desde un pendrive con gran capacidad de almacenamiento (mínimo 32GB) formateado con sistema de archivos EXT4 nativo de Linux. El script se ejecutará desde el directorio raíz del pendrive por lo que tiene que ser ejecutable (_chmod 755 forensic\_get.sh_).
 
-_wp2.weareknitters.com es un servidor aparte donde está el Wordpress. Para el análisis, el wp2 creo que lo podríamos dejar, verdad Doro? Es un servidor aislado del resto que usamos para wordpress y creo que no hay conectividad al resto. Pero tu nos dices Doro. Se puede ignorar, si.&quot;_
+En este pendrive debemos de haber copiado una serie de programas que sirven para realizar estudios de seguridad y forénsica detallados en la sección &quot;Otro software a instalar&quot;.
 
-1. **Creación de un sistema de virtualización** sobre ESx 6.x para garantizar la compatibilidad con la infraestructura del cliente que según nos informa, está originalmente montada sobre esta versión.
+El sistema a auditar podrá tener conexión a Internet, aunque no es indispensable.
 
-1. **Montaje de las máquinas virtuales en el servidor de virtualización** VMware ESx 6.x. Se producen ciertas dificultades en el montaje de las máquinas virtuales en nuestros servidores, pero finalmente se consiguen poner en funcionamiento.
+**Información y evidencias extraídas por el script**
 
-1. **Modificación de las contraseñas del usuario &quot;root&quot;** en todas las máquinas virtuales a analizar, para poder ganar acceso y control en todos los sistemas. Se ha decidido realizar auditorías en los propios sistemas funcionando. Este tipo de auditoría se considera auditoría forénsica en vivo (live systems forensics) y ofrece una visión más realista de posibles infecciones, procesos maliciosos o conexiónes mediante sockets abiertos, además de rootkits presentes y otros posibles agujeros de seguridad.
-
-1. **Realización de imágenes o snapshots** de las máquinas virtuales por si hubiera que restaurarlas a un estado anterior.
-
-1. **Copias de seguridad** del contenido de las páginas web, configuraciones &quot;/etc&quot;, todo tipo de logs y herramientas relacionadas para la realización de análisis externos de los mismos.
-
-1. Solicitud al cliente del **directorio** _ **/media** _ _no presente en las máquinas virtuales suministradas_. Además se procede a revisar el contenido de estos extensos directorios que contienen principalmente imágenes, videos y documentos.
-
-1. Se realiza el **análisis de la estructura de contenidos** en los directorios y sistemas relacionados para entender la infraestructura (funciones de cada máquina en la misma) junto con sus servicios relacionados (apache2, nginx, mysql, php, proxies, email, fail2ban, etc.)
-
-1. **Realización de todas las pruebas** en las máquinas virtuales y extracción de los datos y evidencias relacionadas.
-
-1. **Análisis de las evidencias** extraídas en búsqueda de algún tipo de IoC (indicador de compromiso).
-
-**Descripción de la información extraída y pruebas realizadas**
-
-Al determinarse que es un trabajo muy específico y arduo debido a la gran cantidad de información que hay que analizar, decidimos programar una herramienta que extraiga la información importante de cada máquina virtual hacia una unidad extraíble de forma que pueda ser analizada posteriormente por un auditor.
-
-Esta herramienta a la que nombramos &quot;_forensic\_get.sh_&quot; selecciona y extrae la siguiente información formateada para el análisis forénsico posterior (se aportan los ficheros generados en cada servidor en los directorios con las fechas de extracción en un archivo comprimido con el password &quot;weRknitt3rS!!!f0r3nSE&quot; sin incluir las comillas):
+Esta herramienta llamada &quot;_forensic\_get.sh_&quot; selecciona y extrae la información referida en esta sección y debidamente formateada para el análisis forénsico posterior (se aportan los ficheros generados en cada servidor en los directorios con las fechas de extracción en un archivo comprimido con el password definido en las variables del mismo script:
 
 1. **Información del sistema auditado** (fecha, hora, zona geográfica, nombre de host, usuario utilizado en la auditoría, permisos del usuario utilizado, tiempo de funcionamiento del sistema, fecha introducida por el auditor como posible inicio del compromiso, fecha final del posible compromiso para el análisis, destino de la extracción, número de serie del dispositivo utilizado para la extracción, directorios relacionados con el análisis, usuario del servidor web, sistema operativo del servidor y kernel, conexión a internet del servidor).
 
@@ -247,3 +228,235 @@ Las marcas de tiempo modificadas _ctime_ no se refieren a los cambios realizados
 1. **Errores durante la ejecución de comandos del script** (por motivos de depuración, este fichero muestra cualquier error que haya ocurrido durante la ejecución de cada uno de los comandos del script. Sólo es necesario en caso de errores para depuración).
 
 **Ficheros:** _errors.txt_
+
+**Información y evidencias extraídas por el script**
+
+Esta herramienta llamada &quot;_forensic\_get.sh_&quot; selecciona y extrae la información referida en esta sección y debidamente formateada para el análisis forénsico posterior (se aportan los ficheros generados en cada servidor en los directorios con las fechas de extracción en un archivo comprimido con el password definido en las variables del mismo script:
+
+**Configuración del script**
+
+El script &quot;_forensic\_get.sh_&quot; debe de ser configurado antes de comenzar la extracción de datos forénsicos editando el archivo de configuración forensic\_get.conf que debe de acompañar al script. Los datos a introducir en este archivo son de vital importancia para la extracción forénsica así que deben de ser revisados a conciencia:
+
+Nombre del investigador forénsico que realiza la extracción (para fines de archivado y registro de la información extraída):
+
+**investigator** =&quot;Yago Hansen&quot;
+
+Número de serie de la unidad flash USB utilizada para la extracción forense, ejemplo: &quot;2a65058b&quot;. Se puede obtener ejecutando el commando de Linux blkid una vez introducido el pendrive de archivado de datos forénsicos. Esta unidad debe de estar formateada idealmente en formato ext4 de Linux para mantener los propietarios y otras configuraciones.
+
+**usbid** =&quot;2a65058b-e7c5&quot;
+
+Fecha inicial en la que se sospecha pueda haber comenzado el incidente de ciberseguridad (en formato AAAA-MM-DD). Esta fecha se introduce de forma **opcional** para delimitar la búsqueda de datos y registros indicando esta fecha de inicio. Cualquier dato anterior a esta fecha no será de forma general tenido en cuenta para la extracción:
+
+**start\_date=&quot;2019-06-01&quot;**
+
+Fecha final en la que se sospecha pueda haber finalizado el incidente de ciberseguridad (en formato AAAA-MM-DD). Esta fecha se introduce de forma **opcional** para delimitar la búsqueda de datos y registros indicando esta fecha final. Cualquier dato posterior no será tenido en cuenta en la extracción:
+
+**end\_date=&quot;2019-10-31&quot;**
+
+Archivado de información. Si se introduce el valor 1 en esta variable, se indica que además de recoger los valores importantes relacionados con el incidente, también se recogerán los ficheros originales relacionados. Estos ficheros y directorios (como: _var, etc, root, home, www_) serán comprimidos y almacenados en el pendrive de extracción forénsica:
+
+**archive=0**
+
+Extracción de base de datos MySQL. Si se introduce el valor 1 en esta variable, se indica que se desea recoger un volcado o dump de la/s bases de datos MySQL utilizadas en el servidor indicado para la extracción:
+
+**extractsql=0**
+
+Escaneo de seguridad. Si se introduce el valor 1 en esta variable, se indica que se desea realizar un escaneo de seguridad y búsqueda de malware tras el proceso de recogida de información. Se ejecutarán las herramientas recomendadas que deben de ser incluidas en el pendrive de extracción forense. Véase apartado de Herramientas de seguridad:
+
+**secscan=0**
+
+Obtención de Metadatos de imágenes. Si se introduce el valor 1 en esta variable, se indica que se desea obtener y archivar la información de metadatos que incluyen muchos formatos de imágenes como TIFF, JPG, PNG… Para extraer estos metadatos se utiliza la herramienta _exiftool_ que debería estar instalada en el sistema destino. Si no estuviera instalada y hubiera conexión a Internet, se instalará mediante _apt-get_. Estos metadatos se archivarán en el fichero _imagesmetadata\_media.txt_:
+
+**imgmetadata=0**
+
+Web de tipo Magento. Si se introduce el valor 1 en esta variable, se indica que el servidor investigado aloja una aplicación web de tipo Magento, por lo que realizará ciertos tests de malware y tendrá en cuenta la estructura de este programa:
+
+**magentosite=1**
+
+Apagar el servidor al terminar de auditar. Si se introduce el valor 1 en esta variable, se indica que el script apagará el servidor Linux tras recopilar toda la información forénsica. Este proceso de recopilación de evidencias es largo y se recomienda atender la ejecución del mismo de forma activa por el investigador por si se produjera algún error durante la recopilación. Pero si se desea dejarlo corriendo y apagar el sistema tras la recopilación se puede indicar el valor 1 en esta variable:
+
+**poweroffwhenfinish=1**
+
+Contraseña de archivado. Al finalizar la recopilación de datos, el script archiva toda la información extraída hacia un archivo comprimido y cifrado mediante AES-256 CBC. Se debe de indicar una contraseña robusta para el archivado de información. Pero en caso de no definirla en esta variable de configuración, se utilizará por defecto esta contraseña: &quot;D3f4ultPassWorD@@@####&quot;. Pero recuerde que las contraseñas por defecto son peligrosas y que cada vez que se utiliza una, muere un gatito en algún lugar del mundo :-(
+
+**packagepassword=&quot;MyF0rensicD47a!!!&quot;**
+
+Directorio de la investigación. En principio este script obtiene los datos a analizar de toda la estructura del sistema de archivos, pero en algunos casos es preferible obtenerlos de una unidad de red o punto de montaje en el sistema a analizar. Mediante esta variable se puede limitar el alcance de la búsqueda de evidencias a un directorio concreto:
+
+**investigateonlydir=&quot;/&quot;**
+
+Directorio de almacenamiento Web. Normalmente este directorio, en el que el servidor Web aloja los archivos y aplicaciones suele ser &quot;/var/www&quot;, pero en algunos servidores sobre todo multihosting, este directorio corresponde a otra ruta. Aquí se define el directorio de almacenamiento Web.
+
+**wwwdir=&quot;/var/www/vhost/www.example.com/htdocs&quot;**
+
+Directorio Media. Muchos servidores Web alojan el contenido de medios (imágenes, vídeos, logos, etc.) en la propia estructura de directorios, aunque otros servidores Web utilizan directorios remotos en otros servidores, normalmente basados en un punto de montaje NFS o SMB.
+
+**wwwmedia=&quot;&quot;**
+
+Usuario Web. El usuario Linux con permisos limitados para poder navegar por el sitio web (habitualmente www-data). Se utiliza para comparar el propietario de los archivos en el directorio de la aplicación Web con el usuario utilizado para la misma, en busca de archivos con permisos indebidos.
+
+**wwwuser=&quot;wwwuser&quot;**
+
+Grupo Web. El grupo Linux con permisos limitados para poder navegar por el sitio web (habitualmente www-data). Se utiliza para comparar el propietario de los archivos en el directorio de la aplicación Web con el usuario utilizado para la misma, en busca de archivos con permisos indebidos.
+
+**wwwgroup=&quot;wwwgroup&quot;**
+
+Usuario MySQL. En esta variable se puede de forma opcional incluir el usuario que tiene acceso a la base de datos MySQL a analizar o volcar. En muchos ataques a aplicaciones Web, se archivan en registros SQL líneas de código malicioso utilizado como shells o ataques XSS, etc. Es conveniente volcar la base de datos para su análisis forénsico posterior.
+
+**mysqluser=&quot;mysql\_usr&quot;**
+
+Contraseña del usuario MySQL. A fin de poder realizar un volcado o dump SQL de la base de datos o bases de datos MySQL se precisa de la contraseña del usuario anteriormente indicado. Debe de incluirse la contraseña aquí.
+
+**mysqlpass=&quot;asdefaEFDA35454qdafas&quot;**
+
+Base de datos MySQL a volcar. Nombre de la base de datos MySQL a volcar mediante un dump SQL.
+
+**mysqldb=&quot;db\_com&quot;**
+
+**Ejecución del script**
+
+El script &quot;_forensic\_get.sh_&quot; debe de ser configurado antes de comenzar la extracción de datos forénsicos editando el archivo de configuración forensic\_get.conf que debe de acompañar al script en su directorio de ejecución.
+
+Los datos a introducir en este archivo son de vital importancia para la extracción forénsica así que deben de ser revisados a conciencia:
+
+################# Main configuration variables: #################
+
+## forensic investigator name
+
+investigator=&quot;Yago Hansen&quot;
+
+## USB flash disk serial number &quot;2a65058b&quot; (get with linux blkid command) formated in ext4 fs
+
+usbid=&quot;2a65058b-e7c5&quot;
+
+## Suspicious hack time range (YYYY-MM-DD) optional from start\_date to end\_date
+
+start\_date=&quot;2019-06-01&quot;
+
+end\_date=&quot;2019-10-31&quot;
+
+## if value 1 compress with tar main directories (var etc root home www)
+
+archive=0
+
+## if value 1 execute security scanners at the end
+
+secscan=0
+
+## if value 1 extract all the metadata from common image files to analyze it later
+
+imgmetadata=0
+
+## if value 1 run magento related tests
+
+magentosite=1
+
+## if value 1 power off system after forensic data extraction
+
+poweroffwhenfinish=1
+
+## (mandatory) create a secure password for encrypting forensica data gathered
+
+packagepassword=&quot;MyF0rensicD47a!!!&quot;
+
+## dir to investigate.Sometimes it is necessary to investigate all (/) or just web root (/var/www)
+
+investigateonlydir=&quot;/&quot;
+
+## directory where Web application is stored (usually: /var/www/)
+
+wwwdir=&quot;/var/www/vhost/www.example.com/htdocs&quot;
+
+## Media, public or upload directory in web from $wwwdir (usually: media, pub, upload)
+
+wwwmedia=&quot;&quot;
+
+## user and group name for Web application (usually: www-data, apache)
+
+wwwuser=&quot;www-data&quot;
+
+wwwgroup=&quot;www-data&quot;
+
+## optional MySQL user, password and database to dump DB to ascii file
+
+mysqluser=&quot;mysql\_usr&quot;
+
+mysqlpass=&quot;asdefeFDFADS344DFADFvczafDSFAds34&quot;
+
+mysqldb=&quot;db\_com\_db
+
+#################################################################
+
+**Herramientas de terceros a incluir**
+
+El script &quot;_forensic\_get.sh_&quot; debe de ser configurado antes de comenzar la extracción de datos forénsicos editando el archivo de configuración forensic\_get.conf que debe de acompañar al script. Los datos a introducir en este archivo son de vital importancia para la extracción forénsica así que deben de ser revisados a conciencia:
+
+**Neopi** (https://github.com/CiscoCXSecurity/NeoPI)
+
+NeoPI is a Python script that uses a variety of statistical methods to detect obfuscated and encrypted content within text/script files. The intended purpose of NeoPI is to aid in the detection of hidden web shell code. The development focus of NeoPI was creating a tool that could be used in conjunction with other established detection methods such as Linux Malware Detect or traditional signature/keyword based searches.
+
+NeoPI recursively scans through the file system from a base directory and will rank files based on the results of a number of tests. It also presents a &quot;general&quot; score derived from file rankings within the individual tests.
+
+**Rootkit Hunter** (https://github.com/youngunix/rkhunter)
+
+Rootkit Hunter (rkhunter) es una herramienta de Michael Boelen para encontrar evidencia de software malicioso en sistemas que ejecutan Linux, Mac OS X y UNIX. Como autor original de esta herramienta, lancé la primera versión en 2003. En 2006, el proyecto fue entregado a un nuevo equipo, para asegurar que su desarrollo continuara.
+
+**PHP malware scanner** (https://github.com/scr34m/php-malware-scanner)
+
+Traversing directories for files with php extensions and testing files against text or regexp rules, the rules based on self gathered samples and publicly available malwares/webshells. The goal is to find infected files and fight against kiddies, because to easy to bypass rules.
+
+**Lynis security scanner** (https://github.com/CISOfy/lynis)
+
+Lynis is a security auditing tool for systems based on UNIX like Linux, macOS, BSD, and others. It performs an in-depth security scan and runs on the system itself. The primary goal is to test security defenses and provide tips for further system hardening. It will also scan for general system information, vulnerable software packages, and possible configuration issues. Lynis was commonly used by system administrators and auditors to assess the security defenses of their systems. Besides the &quot;blue team,&quot; nowadays penetration testers also have Lynis in their toolkit.
+
+**chkrootkit** (https://github.com/Magentron/chkrootkit)
+
+Chkrootkit o Check Rootkit es un programa famoso de código abierto, es una herramienta que se utiliza para la digitalización de rootkits, botnets, malwares, etc en tu servidor o sistema Unix/Linux.
+
+**chkrootkit** (https://github.com/Magentron/chkrootkit)
+
+Chkrootkit o Check Rootkit es un programa famoso de código abierto, es una herramienta que se utiliza para la digitalización de rootkits, botnets, malwares, etc en tu servidor o sistema Unix/Linux.
+
+**magescan** (https://github.com/steverobbins/magescan)
+
+The idea behind this is to evaluate the quality and security of a Magento site you don&#39;t have access to. The scenario when you&#39;re interviewing a potential developer or vetting a new client and want to have an idea of what you&#39;re getting into.
+
+**PANhunter** (https://github.com/dbohannon/PANHunter)
+
+Command line tool used to search files for credit card numbers (PAN). Card numbers are verified with regular expression and Luhn (i.e. mod10) checks. Results are written to a spreadsheet containing the file, line number, full card number, and masked card number.
+
+**PANhunt** (https://github.com/Dionach/PANhunt)
+
+PANhunt is a tool that can be used to search drives for credit card numbers (PANs). This is useful for checking PCI DSS scope accuracy. It&#39;s designed to be a simple, standalone tool that can be run from a USB stick. PANhunt includes a python PST file parser.
+
+**PHP-malware-finder** (https://github.com/nbs-system/php-malware-finder)
+
+PHP-malware-finder does its very best to detect obfuscated/dodgy code as well as files using PHP functions often used in malwares/webshells.Detection is performed by crawling the filesystem and testing files against a set of YARA rules. Yes, it&#39;s that simple!
+
+**Apache-scalp** (https://github.com/neuroo/apache-scalp)
+
+Scalp! is a log analyzer for the Apache web server that aims to look for security problems. The main idea is to look through huge log files and extract the possible attacks that have been sent through HTTP/GET (By default, Apache does not log the HTTP/POST variable). Scalp is basically using the regular expression from the PHP-IDS project and matches the lines from the Apache access log file. These regexp has been chosen because of their quality and the top activity of the team maintaining that project. You will then need this file default\_filter.xml in order to run Scalp.
+
+**Shell-Detector** (https://github.com/emposha/Shell-Detector)
+
+Shell Detector – is a application that helps you find and identify php/cgi(perl)/asp/aspx shells. Shell Detector has a &quot;web shells&quot; signature database that helps to identify &quot;web shell&quot; up to 99%. Shell Detector is released under the MIT License http://www.opensource.org/licenses/mit-license.php
+
+**maldetect** (http://www.rfxn.com/downloads/maldetect-current.tar.gz)
+
+Linux Malware Detect (LMD) is a malware scanner for Linux released under the GNU GPLv2 license, that is designed around the threats faced in shared hosted environments. It uses threat data from network edge intrusion detection systems to extract malware that is actively being used in attacks and generates signatures for detection. In addition, threat data is also derived from user submissions with the LMD checkout feature and from malware community resources. The signatures that LMD uses are MD5 file hashes and HEX pattern matches, they are also easily exported to any number of detection tools such as ClamAV.
+
+**Other dependencies**
+
+_Exiftool linux package_
+
+_Clamav antivirus signatures_
+
+_Prelink linux package_
+
+_autoconf_
+
+_libssl-dev_
+
+_python-colorama_
+
+_python-progressbarcd_
