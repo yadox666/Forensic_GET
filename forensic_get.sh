@@ -13,7 +13,6 @@
 # TO-DO:    All logs could be acquired inside defined date range
 #           Continue from last saved log or tool after stopping execution with ctrl+c
 #           Users apache2,nginx and web application user usually is www-data
-#           zgrep en vez de grep para ver dentro de tgz y zips
 #           include some tools like exiftool in a binary format statically compiled
 #####################################################################################
 
@@ -54,7 +53,7 @@ user=$(whoami)
 if mount | grep -qi "$usbdev" ; then
 	mountpoint=$(mount | grep $usbdev | awk '{print $3}')
 else
-	mkdir -p /tmp/pendrive/
+	mkdir -p /tmp/pendrive/ 2>/dev/null
 	e2fsk -p -y $usbdev 2>1 >/tmp/e2fsc.log 
 	if ! mount $usbdev /tmp/pendrive ; then
 		echo "Cannot mount $usbdev pendrive, quitting now!"
@@ -82,10 +81,8 @@ wget -q -t1 -T3 google.com ; online=$? ; rm index.html 2>/dev/null
 #########################################################################
 # System information recopilation
 #########################################################################
-mkdir -p $base_dir
-
-cp "$config_file"  >> "${base_dir}/fgconfig.txt"
-echo "Config file $config_file included..."
+mkdir -p "$base_dir" 2>/dev/null
+cp "$config_file" "${base_dir}/fgconfig.txt"
 
 echo ""  | tee -a "${base_dir}/index.txt"
 echo " +-+-+-+-+-+-+-+-+ +-+-+-+-+ +-+-+-+-+-+-+-+-+-+" | tee -a "${base_dir}/index.txt"
@@ -108,6 +105,8 @@ echo "System online now: $online" | tee -a "${base_dir}/index.txt"
 echo "-----------------------------------------------------" | tee -a "${base_dir}/index.txt"
 echo "Investigation suspicious initial date: $start_date" | tee -a "${base_dir}/index.txt"
 echo "Investigation suspicious end date: $end_date" | tee -a "${base_dir}/index.txt"
+echo "-----------------------------------------------------" | tee -a "${base_dir}/index.txt"
+echo "Config file included: $config_file saved as fconfig.txt" | tee -a "${base_dir}/index.txt"
 echo "-----------------------------------------------------" | tee -a "${base_dir}/index.txt"
 echo "Extracted data destination: $base_dir" | tee -a "${base_dir}/index.txt"
 echo "Extracted data USB flashdisk serial: $usbid ($usbdev)" | tee -a "${base_dir}/index.txt"
@@ -180,7 +179,7 @@ find /etc/cron* -type f -exec sh -c 'echo  "[cron file found: $1]" ; ls -la $1 ;
 # System init scripts
 #########################################################################
 echo "[Autorun scripts]" | tee -a "${base_dir}/rcsysinit.txt"
-echo -e "\n" >> "${base_dir}/sysinit.txt"
+echo -e "\n" >> "${base_dir}/rcsysinit.txt"
 echo "[Present rc sysinit autorun scripts]" >> "${base_dir}/rcsysinit.txt"
 find /etc/rc* -type f -exec sh -c 'echo  "[rc sysinit file found: $1]" ; ls -la $1 ; echo ; cat "$1"; echo' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/rcsysinit.txt"
 
@@ -290,16 +289,22 @@ done
 echo "[wtmp - Logs of all logged in and logged out users in the past]" | tee -a "${base_dir}/logins.txt"
 ls -lat /var/log/wtmp* >> "${base_dir}/logins.txt"
 echo -e "\n" >> "${base_dir}/logins.txt"
-echo "[System wtmp logins $start_date-$end_date]" | tee -a "${base_dir}/logins.txt"
+
+if last --help 2>&1 | grep -q '\-s' && [ -n "$start_date" ] ; then  ## last version supports time range parameter -s
+	echo "[System wtmp logins inside period: $start_date-$end_date]" | tee -a "${base_dir}/logins_period.txt"
+else
+	echo "[System wtmp ALL logins]" | tee -a "${base_dir}/logins.txt"
+fi
+
 find /var/log/ -type f -name wtmp* -print0 | xargs -0 ls -tr | while read file ; do
 	gunzip $file 2>/dev/null
 	filename="${file%.gz}"
 	if last --help 2>&1 | grep -q '\-s' ; then  ## last version supports time range parameter -s
 		if [ -n "$start_date" ] ; then
 			if [ -n "$end_date" ] ; then
-				last -s "$start_date" -t "$end_date" -f "$filename" >>"${base_dir}/logins.txt"
+				last -s "$start_date" -t "$end_date" -f "$filename" >>"${base_dir}/logins_period.txt"
 			else
-				last -s "$start_date" -f "$filename" >>"${base_dir}/logins.txt"
+				last -s "$start_date" -f "$filename" >>"${base_dir}/logins_period.txt"
 			fi
 		else
 			last -f "$filename" >>"${base_dir}/logins.txt"
@@ -312,8 +317,8 @@ done
 echo "[SSH successfull logins]" | tee -a "${base_dir}/loginSSHok.txt"
 echo "[SSH Invalid logins]" | tee -a "${base_dir}/loginSSHfail.txt"
 find /var/log/ -type f -name auth.log* -print0 | xargs -0 ls -tr | while read file ; do
-	zgrep -i "sshd" $file 2>>"${base_dir}/errors.log" | grep "opened" >> "${base_dir}/loginSSHok.txt"
-	zgrep -i "invalid|failed" $file 2>>"${base_dir}/errors.log" >> "${base_dir}/loginSSHfail.txt"
+	zgrep -iE "sshd" $file 2>>"${base_dir}/errors.log" | grep "opened" >> "${base_dir}/loginSSHok.txt"
+	zgrep -iE "invalid|failed" $file 2>>"${base_dir}/errors.log" >> "${base_dir}/loginSSHfail.txt"
 done
 # Try to get fail2ban service logs
 if [ -d /etc/fail2ban/ ] ; then
@@ -383,16 +388,22 @@ echo -e "\n" >> "${base_dir}/fsinfo.txt"
 echo "[Mtab actually mounted filesystems]" >> "${base_dir}/fsinfo.txt"
 cat /etc/mtab 2>>"${base_dir}/errors.log" >> "${base_dir}/fsinfo.txt"
 
-echo "[All files timeline in CSV format]"
-echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/allfilestimeline.csv"
-find "$investigateonlydir" ! -path "${mountpoint}*" -type f -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/allfilestimeline.csv"
+if [ "$allfilescsv" == "1" ] ; then
+	echo "[All files timeline in CSV format]"
+	echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/allfilestimeline.csv"
+	find "$investigateonlydir" ! -path "${mountpoint}*" -type f -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/allfilestimeline.csv"
+fi
 
 echo "[All directories timeline in CSV format]"
 echo "	" >> "${base_dir}/alldirstimeline.csv"
 find "$investigateonlydir" ! -path "${mountpoint}*" -type d -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," 2>>"${base_dir}/errors.log" >> "${base_dir}/alldirstimeline.csv"
 
 echo "[List of all directories in a tree format]" | tee -a "${base_dir}/dirtree.txt"
-tree -dxn -o /tmp/dirtree.txt "$investigateonlydir" 2>>"${base_dir}/errors.log" || ls -R "$investigateonlydir" | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/   /' -e 's/-/|/' 2>>"${base_dir}/errors.log" >> "${base_dir}/dirtree.txt"
+if which tree >/dev/null 2>/dev/null ; then
+	tree -dxn -o "${base_dir}/dirtree.txt" "$investigateonlydir" 2>>"${base_dir}/errors.log" 
+else
+	ls -R "$investigateonlydir" | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/   /' -e 's/-/|/' 2>>"${base_dir}/errors.log" >> "${base_dir}/dirtree.txt"
+fi
 
 echo "[/tmp directory properties]" | tee -a "${base_dir}/filestmp.txt"
 ls -lRa /tmp/ 2>>"${base_dir}/errors.log" >> "${base_dir}/filestmp.txt"
@@ -404,25 +415,27 @@ ls -lRa /mnt/ 2>>"${base_dir}/errors.log" >> "${base_dir}/filesmnt.txt"
 # Files that match access time inside of the investigation period
 #########################################################################
 if [ -n "$start_date" ] ; then
+	touch -d "$(echo $start_date | tr -d '-')" /tmp/start_date
 	if [ -n "$end_date" ] ; then
+		touch -d "$(echo $end_date | tr -d '-')" /tmp/end_date
 		echo "[Suspicious files in period $start_date-$end_date in CSV format in $investigateonlydir]"
 		echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/filesperiod.csv"
-		find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newerat "$start_date" ! -newerat "$end_date" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod.csv"
+		find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newer /tmp/start_date ! -newer /tmp/end_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod.csv"
 		echo "[Suspicious files in period $start_date-$end_date in CSV format in Webdir]"
 		echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/filesperiod_webdir.csv"
-		find "$wwwdir" -type f -newerat "$start_date" ! -newerat "$end_date" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod_webdir.csv"
+		find "$wwwdir" -type f -newer /tmp/start_date ! -newer /tmp/end_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod_webdir.csv"
 		if [ "$archive" == "1" ] ; then
-		    find "$investigateonlydir" -type f -newerat "$start_date" ! -newerat "$end_date" -exec tar -rf "${base_dir}/filesperiod.tar" {} 2>>"${base_dir}/errors.log" \;
+		    find "$investigateonlydir" -type f -newer /tmp/start_date ! -newer /tmp/end_date -exec tar -rf "${base_dir}/filesperiod.tar" {} 2>>"${base_dir}/errors.log" \;
 		fi
 	else
 		echo "[Suspicious files in period $start_date-$end_date in CSV format in $investigateonlydir]"
 		echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/filesperiod.csv"
-		find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newerat "$start_date" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod.csv"
+		find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newer /tmp/start_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod.csv"
 		echo "[Suspicious files in period $start_date-$end_date in CSV format in $wwwdir]"
 		echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/filesperiod_webdir.csv"
-		find "$wwwdir" -type f -newerat "$start_date" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod_webdir.csv"
+		find "$wwwdir" -type f -newer /tmp/start_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesperiod_webdir.csv"
 		if [ "$archive" == "1" ] ; then
-		    find "$investigateonlydir" ! -path "${mountpoint}*" -type f -newerat "$start_date" -exec tar -rf "${base_dir}/filesperiod.tar" {} 2>>"${base_dir}/errors.log" \;
+		    find "$investigateonlydir" ! -path "${mountpoint}*" -type f -newer /tmp/start_date -exec tar -rf "${base_dir}/filesperiod.tar" {} 2>>"${base_dir}/errors.log" \;
 		fi
 	fi
 fi
@@ -452,10 +465,10 @@ fi
 #########################################################################
 if [ "$imgmetadata" == "1" ] ; then
 	if [ -n "${wwwmedia}" ] && [ -d "${wwwmedia}" ] ; then
-		[ "$online" == "1" ] && apt-get --yes --force-yes install exiftool
+		[ "$online" == "1" ] && which exiftool >/dev/null 2>/dev/null || apt-get --yes --force-yes install exiftool
 		echo "[Extracting EXIF image metadata from images]"  | tee -a "${base_dir}/imagesmetadata_media.txt"
 		echo "Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes),type" >> "${base_dir}/imagesmetadata_media.txt"
-		find "$wwwmedia" \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.tif" -o -name "*.tiff" \)-type f -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec sh -c 'exiftool "$1" ; printf -- '-%.0s' $(seq 40); echo "" ' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/imagesmetadata_media.txt"
+		find "$wwwmedia" \( -name "*.jpg" -o -name "*.jpeg" -o -name "*.png" -o -name "*.tif" -o -name "*.tiff" -o -name "*.gif" \) -type f -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec sh -c 'exiftool  -b "$1" ; printf -- '-%.0s' $(seq 40); echo "" ' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/imagesmetadata_media.txt"
 	fi
 fi
 
@@ -502,27 +515,30 @@ find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -nouser
 echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/filesnouser_webdir.csv"
 find "$wwwdir" -nouser -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesnouser_webdir.csv"
 
-futuredate=$(date --date="24 hours" '+%Y-%m-%d')  ## date in the future for finding future files
+futuredate=$(date --date="24 hours" '+%Y%m%d')  ## date in the future for finding future files
+touch -d "$futuredate" /tmp/future_date
 echo "[Files in the future >= ($futuredate)]"
 echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/filesfuture.csv"
 if [ "$archive" == "1" ] ; then
-	find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newerat "$futuredate" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec tar -rf "${base_dir}/filesfuture.tar" {} 2>>"${base_dir}/errors.log" \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture.csv"
+	find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newer /tmp/future_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec tar -rf "${base_dir}/filesfuture.tar" {} 2>>"${base_dir}/errors.log" \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture.csv"
 else
-	find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newerat "$futuredate" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture.csv"
+	find "$investigateonlydir" ! -path "${mountpoint}*" ! -path "${wwwdir}*" -type f -newer /tmp/future_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture.csv"
 fi
 echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/filesfuture_webdir.csv"
-find "$wwwdir" -type f -newerat "$futuredate" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture_webdir.csv"
+find "$wwwdir" -type f -newer /tmp/future_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesfuture_webdir.csv"
 
-datetoold=$(date --date="4 years ago" '+%Y-%m-%d')   ### seems that 4 years ago is a very old and strange date for the system
+datetoold=$(date --date="4 years ago" '+%Y%m%d')   ### seems that 4 years ago is a very old and strange date for the system
+touch -d "$datetoold" /tmp/old_date
+
 echo "[Files older than $datetoold]"
 echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/filesbefore${datetoold}.csv"
 if [ "$archive" == "1" ] ; then
-	find "$investigateonlydir" ! -path "${mountpoint}*" -type f -not -newerat "$datetoold" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec tar -rf "${base_dir}/filesbefore${datetoold}.tar" {} 2>>"${base_dir}/errors.log" \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}.csv"
+	find "$investigateonlydir" ! -path "${mountpoint}*" -type f -not -newer /tmp/old_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" -exec tar -rf "${base_dir}/filesbefore${datetoold}.tar" {} 2>>"${base_dir}/errors.log" \; 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}.csv"
 else
-	find "$investigateonlydir" ! -path "${mountpoint}*" -type f -not -newerat "$datetoold" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}.csv"
+	find "$investigateonlydir" ! -path "${mountpoint}*" -type f -not -newer /tmp/old_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}.csv"
 fi
 echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/filesbefore${datetoold}_webdir.csv"
-find "$wwwdir" -type f -not -newerat "$datetoold" -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}_webdir.csv"
+find "$wwwdir" -type f -not -newer /tmp/old_date -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s\n" 2>>"${base_dir}/errors.log" >> "${base_dir}/filesbefore${datetoold}_webdir.csv"
 
 #########################################################################
 # Big files usually mean backups, data dumps, data leaks...
@@ -624,7 +640,7 @@ fi
 #########################################################################
 # MySQL database server
 #########################################################################
-if which mysql >> "${base_dir}/mysql.txt" 2>> "${base_dir}/mysql.txt" ; then
+if which mysql > "${base_dir}/mysql.txt" 2>> "${base_dir}/mysql.txt" ; then
 	echo "[MySQL database]" | tee -a "${base_dir}/mysql.txt"
 	mysql --version 2>>"${base_dir}/mysql.txt"  >>"${base_dir}/mysql.txt" 
 	echo -e "\n" >> "${base_dir}/mysql.txt"
@@ -655,10 +671,10 @@ echo "[C compilers investigation]"| tee -a "${base_dir}/compilers.txt"
 dpkg --list | grep compiler 2>> "${base_dir}/compilers.txt" >> "${base_dir}/compilers.txt"
 
 echo "[Crypto libraries investigation]"| tee -a "${base_dir}/crypto.txt"
-dpkg --list | grep -i ssl 2>> "${base_dir}/cripto.txt" >> "${base_dir}/cripto.txt"
-echo -e "\n" >> "${base_dir}/cripto.txt"
-echo "[OpenSSL executable version]" >> "${base_dir}/cripto.txt"
-openssl version 2>> "${base_dir}/cripto.txt" >> "${base_dir}/cripto.txt"
+dpkg --list | grep -i ssl 2>> "${base_dir}/crypto.txt" >> "${base_dir}/crypto.txt"
+echo -e "\n" >> "${base_dir}/crypto.txt"
+echo "[OpenSSL executable version]" >> "${base_dir}/crypto.txt"
+openssl version 2>> "${base_dir}/crypto.txt" >> "${base_dir}/crypto.txt"
 
 #########################################################################
 # Find certificate files and private keys in server
@@ -696,7 +712,7 @@ grep -REni -m1 -o ".{0,20}password.{0,20}" "$wwwdir/" >> "${base_dir}/passwords_
 # Installer files investigation
 #########################################################################
 echo "[Execute installer files scanner]" | tee -a "${base_dir}/installers_webdir.txt"
-find "$wwwdir" -name '*install*.php' -exec sh -c 'echo "[installer file found: $1]" ; ls -la "$1" ; echo' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/installers_webdir.txt"
+find "$wwwdir" \( -name '*install*.php' -o -name '*setup*.php' \) -exec sh -c 'echo "[installer file found: $1]" ; ls -la "$1" ; echo' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/installers_webdir.txt"
 
 #########################################################################
 # Endpoints investigation
@@ -724,7 +740,7 @@ grep -Rni "<script src=\"http" "$wwwdir/" >> "${base_dir}/javascript_webdir.txt"
 
 # Find javascript code inside css files
 echo "[Find JavaScript and urls inside CSS files]" | tee -a "${base_dir}/javascriptcss_webdir.txt"
-grep -RE "<script|<link|url\(" --include "\*.css" "$wwwdir/" 2>>"${base_dir}/errors.log" >> "${base_dir}/javascriptcss_webdir.txt"
+grep -RE "script|link|url\(" --include "*.css" "$wwwdir/" 2>>"${base_dir}/errors.log" >> "${base_dir}/javascriptcss_webdir.txt"
 
 # Other kind of javascript malware like //domain.com/src/example.com.js
 echo "[Execute another Javascript endpoint scanner]" | tee -a "${base_dir}/jsendpoints_webdir.txt"
@@ -735,7 +751,7 @@ find "$wwwdir" \( -name '*.php' -o -name '*.js' \) -type f -printf "%p,%A+,%T+,%
 
 # Find base64 encoded strings inside files (to-do second grep should evaluate only expression after "filename:"xxxxxxx)
 echo "[Find some base64 encoded long strings]" | tee -a "${base_dir}/base64encoded_webdir.txt"
-grep -Po '(?:[A-Za-z0-9+/]{4}){4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?' "$wwwdir/" | grep -P '(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*' 2>>"${base_dir}/errors.log" >> "${base_dir}/base64encoded_webdir.txt"
+grep -Por '(?:[A-Za-z0-9+/]{4}){4,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?' "$wwwdir/" | grep -P '(?=.*\d)(?=.*[a-z])(?=.*[A-Z]).*' 2>>"${base_dir}/errors.log" >> "${base_dir}/base64encoded_webdir.txt"
 
 #########################################################################
 # Data archive for further investigation
@@ -780,7 +796,7 @@ if [ "$secscan" == "1" ] ; then
 	# Should stop some processes to free some memory (apache2, ngnix, HHVM, php-fpm)
 	killall apache2 2>/dev/null 
 	killall nginx 2>/dev/null 
-	/etc/init.d/php7.0-fpm stop >/dev/null 
+	/etc/init.d/php7.0-fpm stop >/dev/null 2>/dev/null 
 
 	# Run Lynis if present
 	if [ -x "$mountpoint/lynis/lynis" ] ; then
@@ -803,6 +819,8 @@ if [ "$secscan" == "1" ] ; then
 	# apt install prelink
 	if [ -f "$mountpoint/rkhunter/files/rkhunter" ] ; then
 		echo "[Execute rkhunter malware scanner]"
+		cd "$mountpoint/rkhunter/"
+		./installer.sh --install >/dev/null 2>/dev/null
 		cd "$mountpoint/rkhunter/files/"
 		./rkhunter --check --sk >> "${base_dir}/rkhunter.txt" 2>>"${base_dir}/errors.log"
 	fi
@@ -832,12 +850,14 @@ if [ "$secscan" == "1" ] ; then
 
 	# php malware finder (requirements: apt install autoconf libssl-dev)
 	# wget https://github.com/plusvic/yara/archive/v3.4.0.tar.gz
-	# cd yara-3.4.0 ; ./bootstrap ; ./configure ; make ; make install
+	# gunzip v3.4.0.tar.gz ; tar -xf v3.4.0.tar ; 
 	if [ -f "$mountpoint/php-malware-finder/php-malware-finder/phpmalwarefinder" ] ; then
 		echo "[Execute PHP malware finder]"
-		cd "$mountpoint/php-malware-finder/yara-3.4.0/"
-		[ "$online" == "1" ] && apt-get install --yes --force-yes autoconf libssl-dev
-		make install
+		if ! which yara  >/dev/null 2>/dev/null ; then
+			cd "$mountpoint/php-malware-finder/yara-3.4.0/"
+			[ "$online" == "1" ] && apt-get install --yes --force-yes autoconf libssl-dev make libtool
+			make install
+		fi
 		cd "$mountpoint/php-malware-finder/php-malware-finder/"
 		./phpmalwarefinder "$wwwdir" >> "${base_dir}/php-malware-finder.txt" 2>>"${base_dir}/errors.log"
 	fi
@@ -850,8 +870,9 @@ if [ "$secscan" == "1" ] ; then
 		# Magento malware known files finder
 		echo "[Execute Magento known files malware scanner]"
 		echo "[Name,Last access,Last modification,Last status chg,User/ID,Group/ID,Permissions,Size(bytes)]" >> "${base_dir}/magentomalware_webdir.csv"
-		find "$wwwdir" -name \( -name "jquery.php" -o -name "jquery.pl" -o -name "css.php" -o -name "opp.php" -o -name "xrc.php" -o -name "order.php" -o -name "jquerys.php" -o -name "mage_ajax.php" -o -name "Maged.php" \) -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/magentomalware_webdir.csv"
-		grep -Reno "googleLabel|updMsg|propVersion|cachefooter|sortproc|subCatalog|sumMenu|onClipboard|optViewport|targetscope|appendtooltip|setupScreen|strictheight|hashProcedure|onepage|checkout|onestep|firecheckout" "$wwwdir/" >> "${base_dir}/magentoskimmer_webdir.txt" 2>>"${base_dir}/errors.log"
+		find "$wwwdir" \( -name "jquery.php" -o -name "jquery.pl" -o -name "css.php" -o -name "opp.php" -o -name "xrc.php" -o -name "order.php" -o -name "jquerys.php" -o -name "mage_ajax.php" -o -name "Maged.php" \) -printf "%p,%A+,%T+,%C+,%u,%g,%m,%M,%s," -exec sh -c 'file "$1" | cut -d: -f2-' sh {} \; 2>>"${base_dir}/errors.log" >> "${base_dir}/magentomalware_webdir.csv"
+
+		grep -REno "googleLabel|updMsg|propVersion|cachefooter|sortproc|subCatalog|sumMenu|onClipboard|optViewport|targetscope|appendtooltip|setupScreen|strictheight|hashProcedure|onepage|checkout|onestep|firecheckout" "$wwwdir/" >> "${base_dir}/magentoskimmer_webdir.txt" 2>>"${base_dir}/errors.log"
 
 		# PANHunter Credit Card scanner
 		if [ -f "$mountpoint/PANHunter/exec_pan_hunter.py" ] ; then
@@ -880,7 +901,7 @@ echo "[End of recopilation]"
 #########################################################################
 # to decript later read decryptpackage.txt file 
 echo "[Packaging recopilated data]"
-if tar czf - "$base_dir" 2>>"${base_dir}/errors.log" | openssl aes-256-cbc -salt -md sha512 -pbkdf2 -iter 100000 -e -pass pass:"$packagepassword" -out "$mountpoint/$devicename_$filedate.tgz.enc" 2>>"${base_dir}/errors.log" ; then
+if tar czf - "$base_dir" 2>>"${base_dir}/errors.log" | openssl enc -aes-256-cbc -salt -md sha512 -pass pass:"$packagepassword" -out "$mountpoint/$devicename_$filedate.tgz.enc" 2>>"${base_dir}/errors.log" ; then
 	sha1sum "$mountpoint/$devicename_$filedate.tgz.enc" > "$mountpoint/$devicename_$filedate.tgz.enc.sha1"
 	echo "[Data successfully packed]"
 	echo "[Relevant files are: sha1sum -c $devicename_$filedate.tgz.enc, sha1sum -c $devicename_$filedate.tgz.enc.sha1, decryptpackage.txt]"
@@ -902,7 +923,7 @@ if tar czf - "$base_dir" 2>>"${base_dir}/errors.log" | openssl aes-256-cbc -salt
 	echo "tar -xzf  $devicename_$filedate.tgz" >> "$mountpoint/decryptpackage.txt"
 	echo "######################################" >> "$mountpoint/decryptpackage.txt"
 	echo -ne "Encrypted with " >> "$mountpoint/decryptpackage.txt"
-	openssl version 2>> "${base_dir}/decryptpackage.txt" >> "${base_dir}/decryptpackage.txt"
+	openssl version >> "$mountpoint/decryptpackage.txt"
 else
 	echo "[Error packing data! Please do it manually]"
 fi
